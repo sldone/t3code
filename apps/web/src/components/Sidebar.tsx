@@ -1051,6 +1051,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   } | null>(null);
   const dragSensorRef = useRef<SidebarPointerSensor | null>(null);
   const contextDragKeyRef = useRef<string | null>(null);
+  const dragScrollRef = useRef<{ readonly viewport: Element; readonly top: number } | null>(null);
   const [actionSweep, setActionSweep] = useState<{
     action: SidebarSweepAction;
     keys: ReadonlySet<string>;
@@ -1709,6 +1710,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const finishThreadDrag = (started: boolean) => {
     dragSensorRef.current = null;
     contextDragKeyRef.current = null;
+    dragScrollRef.current = null;
     endThreadContextDrag();
     if (started) {
       listMotionRef.current?.release();
@@ -1735,6 +1737,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     const bounds = threadListRef.current?.getBoundingClientRect();
     return bounds !== undefined && (point.x < bounds.left || point.x > bounds.right);
   };
+  // The path out of the list often crosses dnd-kit's edge zone, which autoscrolls the sidebar.
+  const restoreDragScroll = () => {
+    const scroll = dragScrollRef.current;
+    if (scroll && scroll.viewport.scrollTop !== scroll.top) scroll.viewport.scrollTop = scroll.top;
+  };
   const moveThreadContextDrag = (point: { x: number; y: number }) => {
     const contextDrag = pointerOutsideThreadList(point);
     setDragState((current) =>
@@ -1746,6 +1753,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       endThreadContextDrag();
       return false;
     }
+    restoreDragScroll();
     const threads = contextDragThreads();
     const title =
       threadByKeyRef.current.get(contextDragKeyRef.current ?? "")?.title.trim() || "Thread";
@@ -1754,6 +1762,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   };
   const dropThreadContextDrag = (point: { x: number; y: number }) => {
     if (!pointerOutsideThreadList(point)) return false;
+    restoreDragScroll();
     dropThreadContext(point, contextDragThreads());
     return true;
   };
@@ -1880,6 +1889,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     if (activeSection === undefined) return;
     listMotionRef.current?.suspend();
     const list = threadListRef.current;
+    const viewport = list?.closest('[data-slot="scroll-area-viewport"]');
+    dragScrollRef.current = viewport ? { viewport, top: viewport.scrollTop } : null;
     const header = list?.querySelector<HTMLElement>('[data-testid="sidebar-pinned-header"]');
     if (list && header) {
       const listRect = list.getBoundingClientRect();
